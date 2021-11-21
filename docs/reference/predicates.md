@@ -363,6 +363,53 @@ JWTPayloadAllKVRegexp("iss", "^https://")
 JWTPayloadAnyKVRegexp("iss", "^https://")
 ```
 
+### HeaderSHA256
+
+Matches if SHA-256 hash of the header value (secret) equals to any of the configured hash values.
+Several hash values could be used to match multiple secrets e.g. during secret rotation.
+
+Hash values only hide secrets from parties that have access to the source of Skipper routes.
+Authentication strength depends on the strength of the secret value so e.g.
+`HeaderSHA256("X-Secret", "2bb80d537b1da3e38bd30361aa855686bde0eacd7162fef6a25fe97bf527a25b")`
+is not stronger than just `Header("X-Secret", "secret")`.
+
+Parameters:
+
+* header name (string)
+* one or more hex-encoded SHA-256 hash values of [pre-shared keys](https://en.wikipedia.org/wiki/Pre-shared_key) (string)
+
+Examples:
+
+```
+// Pre-shared key
+HeaderSHA256(
+    "X-Secret",
+    "2bb80d537b1da3e38bd30361aa855686bde0eacd7162fef6a25fe97bf527a25b" // SHA256("secret")
+) -> inlineContent("ok\n") -> <shunt>
+```
+
+```
+// To rotate secret:
+// * add new secret - both old and new secrets match during rotation
+// * update client to use new secret
+// * remove old secret
+HeaderSHA256(
+    "X-Secret",
+    "cba06b5736faf67e54b07b561eae94395e774c517a7d910a54369e1263ccfbd4", // SHA256("old")
+    "11507a0e2f5e69d5dfa40a62a1bd7b6ee57e6bcd85c67c9b8431b36fff21c437"  // SHA256("new")
+) -> inlineContent("ok\n") -> <shunt>
+```
+
+```
+// Basic Auth
+anon: * -> setResponseHeader("WWW-Authenticate", `Basic realm="foo", charset="UTF-8"`) -> status(401) -> <shunt>;
+auth: HeaderSHA256(
+    "Authorization",
+    "caae07e42ed8d231a58edcde95782b0feb67186172c18c89894ce4c2174df137", // SHA256("Basic " + BASE64("test:123£"))
+    "157da8472590f0ce0a7c651bd79aecb5cc582944fcf76cbabada915d333deee8"  // SHA256("Basic " + BASE64("Aladdin:open sesame"))
+) -> inlineContent("ok\n") -> <shunt>;
+```
+
 ## Interval
 
 An interval implements custom predicates to match routes only during some period of time.
