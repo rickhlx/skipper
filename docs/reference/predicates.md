@@ -365,7 +365,8 @@ JWTPayloadAnyKVRegexp("iss", "^https://")
 
 ### HeaderSHA256
 
-Matches if SHA-256 hash of the header value (secret) equals to any of the configured hash values.
+Matches if SHA-256 hash of the header value (known as [pre-shared key](https://en.wikipedia.org/wiki/Pre-shared_key) or secret)
+equals to any of the configured hash values.
 Several hash values could be used to match multiple secrets e.g. during secret rotation.
 
 Hash values only hide secrets from parties that have access to the source of Skipper routes.
@@ -373,21 +374,45 @@ Authentication strength depends on the strength of the secret value so e.g.
 `HeaderSHA256("X-Secret", "2bb80d537b1da3e38bd30361aa855686bde0eacd7162fef6a25fe97bf527a25b")`
 is not stronger than just `Header("X-Secret", "secret")`.
 
+The secret value must be kept secret, must be used by a single client and must be rotated periodically.
+See below how to generate random secret value using [OpenSSL](https://www.openssl.org/docs/man1.1.1/man1/rand.html).
+
 Parameters:
 
 * header name (string)
-* one or more hex-encoded SHA-256 hash values of [pre-shared keys](https://en.wikipedia.org/wiki/Pre-shared_key) (string)
+* one or more hex-encoded SHA-256 hashes of the matching header values (string)
 
-Examples:
+Secure secret value example:
+```sh
+#
+# 1. Generate cryptographically secure pseudo random secret header value:
+# - length of at least 32 bytes (the size of the SHA-256 output)
+# - encode as -base64 or -hex to get ASCII text value
+#
+SECRET=$(openssl rand -base64 32)
+echo $SECRET
+3YchPsliGjBXvyl/ncLWEI8/loKGrj/VNM4garxWEmA=
 
+#
+# 2. Get SHA-256 hash of the secret header value to use as HeaderSHA256 argument:
+# - use echo -n to not output the trailing newline
+#
+echo -n $SECRET | sha256sum
+a6131ba920df753c8109500cc11818f7192336d06532f6fa13009c2e4f6e1841  -
 ```
-// Pre-shared key
+```
+// 3. Configure route to match hash of the secret value
 HeaderSHA256(
     "X-Secret",
-    "2bb80d537b1da3e38bd30361aa855686bde0eacd7162fef6a25fe97bf527a25b" // SHA256("secret")
+    "a6131ba920df753c8109500cc11818f7192336d06532f6fa13009c2e4f6e1841"
 ) -> inlineContent("ok\n") -> <shunt>
 ```
+```sh
+# 4. Test secret value
+curl -H "X-Secret: $SECRET" http://localhost:9090
+```
 
+Secret rotation example:
 ```
 // To rotate secret:
 // * add new secret - both old and new secrets match during rotation
@@ -400,8 +425,8 @@ HeaderSHA256(
 ) -> inlineContent("ok\n") -> <shunt>
 ```
 
+[Basic access authentication](https://en.wikipedia.org/wiki/Basic_access_authentication) example:
 ```
-// Basic Auth
 anon: * -> setResponseHeader("WWW-Authenticate", `Basic realm="foo", charset="UTF-8"`) -> status(401) -> <shunt>;
 auth: HeaderSHA256(
     "Authorization",
